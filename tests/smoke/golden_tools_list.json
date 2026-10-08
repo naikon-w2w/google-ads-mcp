@@ -87,6 +87,129 @@
       "annotations": {
         "readOnlyHint": true
       },
+      "description": "Discover keyword ideas and historical search metrics, one page at a time.\n\nRequires Google Ads Basic or Standard access and an accessible customer\naccount. This tool does not create plans, campaigns or ads.\n\nSupply keywords, a page URL, keywords plus a page URL, OR a site URL.\nsite_url cannot be combined with keywords or url. Supply language and\ngeographic resource names explicitly; an empty geo list means worldwide.\nResolve IDs using the language_constant and geo_target_constant resources\nwith the search tool rather than guessing them.\n\nAt most page_size ideas (1-100, default 50) are requested. Pass the returned\nnext_page_token with otherwise identical arguments for another page.\nThis tool never automatically fetches subsequent pages or retries calls.\n\nResults use Google Ads protobuf JSON field names. Optional missing metrics\nare omitted, not converted to zero. Int64 metrics are decimal strings;\nenum values are names. Bid fields ending in _micros are millionths of the\ncustomer account's currency (look up customer.currency_code separately).\nCompetition measures advertising competition, not organic SEO difficulty.\nHistorical metrics use Google's default period, generally 12 months, and\nare estimates. Idea results may merge close variants of seed keywords.\n\nlogin_customer_id optionally selects the manager account used for access;\notherwise the server's GOOGLE_ADS_LOGIN_CUSTOMER_ID setting is used.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "customer_id": {
+            "pattern": "^(?:[0-9]{10}|[0-9]{3}-[0-9]{3}-[0-9]{4})$",
+            "type": "string"
+          },
+          "geo_target_constants": {
+            "items": {
+              "pattern": "^geoTargetConstants/[0-9]+$",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
+          "include_adult_keywords": {
+            "default": false,
+            "type": "boolean"
+          },
+          "keyword_plan_network": {
+            "default": "GOOGLE_SEARCH",
+            "enum": [
+              "GOOGLE_SEARCH",
+              "GOOGLE_SEARCH_AND_PARTNERS"
+            ],
+            "type": "string"
+          },
+          "keywords": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "language": {
+            "pattern": "^languageConstants/[0-9]+$",
+            "type": "string"
+          },
+          "login_customer_id": {
+            "anyOf": [
+              {
+                "pattern": "^(?:[0-9]{10}|[0-9]{3}-[0-9]{3}-[0-9]{4})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "page_size": {
+            "default": 50,
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "page_token": {
+            "default": "",
+            "maxLength": 8192,
+            "type": "string"
+          },
+          "site_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "customer_id",
+          "language",
+          "geo_target_constants"
+        ],
+        "type": "object"
+      },
+      "name": "planning_generate_keyword_ideas",
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Planning Generate Keyword Ideas"
+    },
+    {
+      "_meta": {
+        "fastmcp": {
+          "tags": []
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
       "description": "Fetches data from the Google Ads API using the search method",
       "inputSchema": {
         "additionalProperties": false,

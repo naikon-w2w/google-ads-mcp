@@ -27,6 +27,7 @@ def start_server_process() -> subprocess.Popen:
     env = os.environ.copy()
     env.pop("GOOGLE_ADS_MCP_OAUTH_CLIENT_ID", None)
     env.pop("GOOGLE_ADS_MCP_OAUTH_CLIENT_SECRET", None)
+    env["GOOGLE_ADS_MCP_TRANSPORT"] = "stdio"
 
     return subprocess.Popen(
         [sys.executable, "-m", "ads_mcp.server"],

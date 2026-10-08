@@ -84,3 +84,67 @@ class TestUtils(unittest.TestCase):
                 server.run_server()
 
         run.assert_called_once_with()
+
+    def test_http_without_oauth_defaults_to_loopback(self):
+        from ads_mcp import server
+
+        with (
+            patch.dict(
+                server.os.environ,
+                {"GOOGLE_ADS_MCP_TRANSPORT": "streamable-http"},
+                clear=True,
+            ),
+            patch.object(server.mcp, "run") as run,
+        ):
+            server.run_server()
+
+        run.assert_called_once_with(
+            transport="streamable-http",
+            host="127.0.0.1",
+            port=8080,
+            uvicorn_config={"access_log": False},
+        )
+
+    def test_explicit_http_address(self):
+        from ads_mcp import server
+
+        with (
+            patch.dict(
+                server.os.environ,
+                {
+                    "GOOGLE_ADS_MCP_TRANSPORT": "streamable-http",
+                    "GOOGLE_ADS_MCP_HOST": "::1",
+                    "PORT": "8765",
+                },
+                clear=True,
+            ),
+            patch.object(server.mcp, "run") as run,
+        ):
+            server.run_server()
+        self.assertEqual(run.call_args.kwargs["host"], "::1")
+        self.assertEqual(run.call_args.kwargs["port"], 8765)
+
+    def test_invalid_configuration_never_starts_server(self):
+        from ads_mcp import server
+
+        invalid = [
+            {"GOOGLE_ADS_MCP_TRANSPORT": "sse"},
+            {"GOOGLE_ADS_MCP_OAUTH_CLIENT_ID": "incomplete"},
+            {"GOOGLE_ADS_MCP_OAUTH_CLIENT_SECRET": "incomplete"},
+            {
+                "GOOGLE_ADS_MCP_TRANSPORT": "stdio",
+                "GOOGLE_ADS_MCP_OAUTH_CLIENT_ID": "test-id",
+                "GOOGLE_ADS_MCP_OAUTH_CLIENT_SECRET": "test-secret",
+            },
+            {"GOOGLE_ADS_MCP_TRANSPORT": "streamable-http", "PORT": "0"},
+            {"GOOGLE_ADS_MCP_TRANSPORT": "streamable-http", "PORT": "65536"},
+        ]
+        for env in invalid:
+            with (
+                self.subTest(env=env),
+                patch.dict(server.os.environ, env, clear=True),
+                patch.object(server.mcp, "run") as run,
+            ):
+                with self.assertRaises(ValueError):
+                    server.run_server()
+                run.assert_not_called()

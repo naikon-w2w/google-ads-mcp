@@ -17,6 +17,10 @@ to provide several
 - `get_resource_metadata`: Retrieves metadata about a Google Ads API resource type, for example "campaign". This is useful to understand the structure of the data and what fields are available for querying.
 - `list_accessible_customers`: Returns ids of customers directly accessible
   by the user authenticating the call.
+- `generate_keyword_ideas`: Discovers Keyword Planner ideas from keywords,
+  a page URL, both, or a whole site, including available historical metrics.
+  The default namespaced name is `planning_generate_keyword_ideas`.
+  See [Keyword Planner](docs/keyword-planner.md) for setup and examples.
 
 ### Configuring and Namespacing Tools
 
@@ -35,6 +39,9 @@ If an explicitly requested configuration file (via the environment variable) is 
 namespaces:
   # Option 1: Enable category 'customers' with default prefix -> "customers_list_accessible_customers"
   customers: true
+
+  # Enable Keyword Planner tools.
+  planning: true
 
   # Option 2: Enable category 'search' with a custom prefix -> "query_search"
   search: "query"
@@ -201,6 +208,34 @@ Configure your [Application Default Credentials
 (ADC)](https://cloud.google.com/docs/authentication/provide-credentials-adc).
 Make sure the credentials are for a user with access to your Google Ads
 accounts or properties.
+
+ADC also works with a local Streamable HTTP endpoint, without enabling the
+server's OAuth proxy:
+
+```shell
+GOOGLE_ADS_MCP_TRANSPORT=streamable-http \
+GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/application_default_credentials.json \
+PORT=8765 google-ads-mcp
+```
+
+This listens on `http://127.0.0.1:8765/mcp` by default. Tool discovery works
+without credentials; Google Ads calls require valid ADC. Leave
+`GOOGLE_ADS_MCP_OAUTH_CLIENT_ID` and `GOOGLE_ADS_MCP_OAUTH_CLIENT_SECRET` unset
+for this mode. The downloaded OAuth client JSON is used to obtain ADC; it is
+not itself an ADC file.
+
+`GOOGLE_ADS_MCP_TRANSPORT` accepts `stdio` or `streamable-http`. When unset,
+the existing defaults apply: OAuth proxy mode uses HTTP and ADC uses stdio.
+`GOOGLE_ADS_MCP_HOST` overrides the HTTP bind address. Authenticated OAuth
+mode retains its `0.0.0.0` default; HTTP with ADC defaults to `127.0.0.1`.
+An incomplete OAuth client configuration or an unsupported transport fails
+at startup instead of silently selecting another mode.
+
+HTTP with ADC has no built-in caller authentication. Only expose it on a
+trusted private interface behind an authenticated gateway, or on loopback
+for local development. All callers use the configured Google identity and
+its account access. Setting an explicit non-loopback host does not add
+authentication or per-caller account restrictions.
 
 Credentials must include the Google Ads API scope:
 

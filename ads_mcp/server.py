@@ -34,13 +34,31 @@ from ads_mcp.resources import (
 def run_server() -> None:
     _CLIENT_ID = os.environ.get("GOOGLE_ADS_MCP_OAUTH_CLIENT_ID")
     _CLIENT_SECRET = os.environ.get("GOOGLE_ADS_MCP_OAUTH_CLIENT_SECRET")
-    port = int(os.environ.get("PORT", "8080"))
+    if bool(_CLIENT_ID) != bool(_CLIENT_SECRET):
+        raise ValueError("Configure both OAuth client ID and client secret.")
 
-    if _CLIENT_ID and _CLIENT_SECRET:
+    oauth_enabled = bool(_CLIENT_ID and _CLIENT_SECRET)
+    transport = os.environ.get("GOOGLE_ADS_MCP_TRANSPORT") or (
+        "streamable-http" if oauth_enabled else "stdio"
+    )
+    if transport not in ("stdio", "streamable-http"):
+        raise ValueError(
+            "GOOGLE_ADS_MCP_TRANSPORT must be stdio or streamable-http."
+        )
+    if transport == "stdio" and oauth_enabled:
+        raise ValueError("OAuth requires the streamable-http transport.")
+
+    if transport == "streamable-http":
+        port = int(os.environ.get("PORT", "8080"))
+        if not 1 <= port <= 65535:
+            raise ValueError("PORT must be between 1 and 65535.")
+        host = os.environ.get("GOOGLE_ADS_MCP_HOST") or (
+            "0.0.0.0" if oauth_enabled else "127.0.0.1"
+        )
         mcp.run(
             transport="streamable-http",
             port=port,
-            host="0.0.0.0",
+            host=host,
             uvicorn_config={"access_log": False},
         )
     else:
