@@ -21,6 +21,9 @@ to provide several
   a page URL, both, or a whole site, including available historical metrics.
   The default namespaced name is `planning_generate_keyword_ideas`.
   See [Keyword Planner](docs/keyword-planner.md) for setup and examples.
+- `generate_keyword_historical_metrics`: Returns search volumes and monthly
+  history for a supplied list of 1–100 keywords, including merged close variants.
+  The default namespaced name is `planning_generate_keyword_historical_metrics`.
 
 ### Configuring and Namespacing Tools
 

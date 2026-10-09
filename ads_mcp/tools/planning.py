@@ -15,6 +15,7 @@
 """Read-only Keyword Planner tools with explicit targeting and pagination."""
 
 import re
+from contextlib import contextmanager
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
@@ -23,6 +24,7 @@ from fastmcp.exceptions import ToolError
 from google.ads.googleads.errors import GoogleAdsException
 from google.ads.googleads.v25.services.types.keyword_plan_idea_service import (
     GenerateKeywordIdeasRequest,
+    GenerateKeywordHistoricalMetricsRequest,
 )
 from google.api_core.exceptions import GoogleAPICallError
 from google.auth.exceptions import DefaultCredentialsError, RefreshError
@@ -60,6 +62,35 @@ def _validate_seed_url(value: str) -> str:
     if not valid:
         raise ToolError("Use an absolute HTTP(S) seed URL without credentials.")
     return value
+
+
+@contextmanager
+def _planning_api_errors():
+    """Keep API and credential errors safe for both Planner tools."""
+    try:
+        yield
+    except GoogleAdsException as error:
+        # Google error messages may echo submitted keywords or URLs. Return
+        # only structured error codes and the request ID for diagnostics.
+        codes = [
+            MessageToDict(
+                type(item.error_code).pb(item.error_code),
+                preserving_proto_field_name=True,
+            )
+            for item in error.failure.errors
+        ]
+        raise ToolError(
+            f"Google Ads request failed ({error.request_id}): {codes}"
+        ) from None
+    except (DefaultCredentialsError, RefreshError):
+        raise ToolError(
+            "Google Ads credentials are missing or require reauthorization."
+        ) from None
+    except GoogleAPICallError as error:
+        raise ToolError(
+            f"Google Ads request failed: {type(error).__name__}. "
+            "Check access and quota before retrying."
+        ) from None
 
 
 @planning_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -139,7 +170,7 @@ def generate_keyword_ideas(
     else:
         request.url_seed.url = url
 
-    try:
+    with _planning_api_errors():
         service = utils.get_googleads_service(
             "KeywordPlanIdeaService", login_customer_id=login_customer_id
         )
@@ -165,25 +196,74 @@ def generate_keyword_ideas(
             "next_page_token": response.next_page_token,
             "total_size": int(response.total_size),
         }
-    except GoogleAdsException as error:
-        # Google error messages may echo submitted keywords or URLs. Return
-        # only structured error codes and the request ID for diagnostics.
-        codes = [
+
+
+@planning_mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@validate_call
+def generate_keyword_historical_metrics(
+    customer_id: CustomerId,
+    language: Language,
+    geo_target_constants: Annotated[list[GeoTarget], Field(max_length=10)],
+    keywords: Annotated[list[Keyword], Field(min_length=1, max_length=100)],
+    keyword_plan_network: Network = "GOOGLE_SEARCH",
+    login_customer_id: CustomerId | None = None,
+) -> dict[str, Any]:
+    """Get historical search volumes for an existing list of 1-100 keywords.
+
+    Returns average monthly searches, monthly history (Google's default period,
+    generally 12 months), advertising competition and bid ranges when available.
+    This reads metrics; it does not create plans, campaigns or new keyword ideas.
+    Supply explicit language/geographic resource names, resolved using search.
+    An empty geographic list means worldwide. Google Search is the default.
+
+    The 100-keyword limit bounds request and response size for MCP clients.
+    Split larger lists into explicit calls; no automatic batching or retries.
+    One API call has a 30-second timeout. Uses the same Keyword Planner quota
+    as keyword ideas; pace calls and reuse results when appropriate.
+
+    Google can merge close variants into one result. Match using result text
+    and close_variants, never by list position; don't add merged volumes twice.
+    Missing optional metrics remain absent, not zero. An empty result set or
+    an omitted keyword does not prove zero searches. Int64 values are decimal
+    strings, enums are names, and bids in _micros are millionths of the Ads
+    account currency. Competition is advertising competition, not SEO difficulty.
+    All volumes are estimates. Targeting and requested/returned counts are
+    included in the response. No submitted keyword list is logged by this tool.
+
+    login_customer_id selects manager access when needed; otherwise uses the
+    server's GOOGLE_ADS_LOGIN_CUSTOMER_ID setting.
+    """
+    keywords = [keyword.strip() for keyword in keywords]
+    if any(not keyword for keyword in keywords):
+        raise ToolError("Keywords must not be blank.")
+    request = GenerateKeywordHistoricalMetricsRequest(
+        customer_id=utils.clean_customer_id(customer_id),
+        language=language,
+        geo_target_constants=geo_target_constants,
+        keywords=keywords,
+        keyword_plan_network=keyword_plan_network,
+    )
+    with _planning_api_errors():
+        service = utils.get_googleads_service(
+            "KeywordPlanIdeaService", login_customer_id=login_customer_id
+        )
+        response = service.generate_keyword_historical_metrics(
+            request=request, retry=None, timeout=30.0
+        )
+        results = [
             MessageToDict(
-                type(item.error_code).pb(item.error_code),
+                type(result).pb(result),
                 preserving_proto_field_name=True,
+                always_print_fields_with_no_presence=False,
             )
-            for item in error.failure.errors
+            for result in response.results
         ]
-        raise ToolError(
-            f"Google Ads request failed ({error.request_id}): {codes}"
-        ) from None
-    except (DefaultCredentialsError, RefreshError):
-        raise ToolError(
-            "Google Ads credentials are missing or require reauthorization."
-        ) from None
-    except GoogleAPICallError as error:
-        raise ToolError(
-            f"Google Ads request failed: {type(error).__name__}. "
-            "Check access and quota before retrying."
-        ) from None
+        return {
+            "customer_id": request.customer_id,
+            "language": language,
+            "geo_target_constants": list(geo_target_constants),
+            "keyword_plan_network": keyword_plan_network,
+            "requested_keyword_count": len(keywords),
+            "returned_result_count": len(results),
+            "results": results,
+        }

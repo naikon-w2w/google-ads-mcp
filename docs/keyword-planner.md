@@ -3,8 +3,10 @@
 The `planning` namespace exposes read-only keyword research tools. The first
 tool, `planning_generate_keyword_ideas`, returns ideas and historical metrics
 from `KeywordPlanIdeaService.GenerateKeywordIdeas`. It does not create plans,
-campaigns, ads or budgets. Standalone historical-metric and forecast tools
-are not implemented yet.
+campaigns, ads or budgets. `planning_generate_keyword_historical_metrics`
+returns volumes for an existing keyword list using
+`KeywordPlanIdeaService.GenerateKeywordHistoricalMetrics`. Forecast tools are
+not implemented yet.
 
 ## Access and credentials
 
@@ -45,7 +47,7 @@ authentication. Do not publish the endpoint directly. A shared deployment
 must authenticate callers and enforce their permitted accounts at its
 gateway or use the existing OAuth proxy mode.
 
-## Tool inputs
+## Keyword ideas inputs
 
 Targeting is explicit: supply `language` as a `languageConstants/ID` resource
 and `geo_target_constants` as up to ten `geoTargetConstants/ID` resources.
@@ -85,6 +87,36 @@ metadata. An empty next-page token means there is no further page. Request
 another page explicitly with otherwise identical arguments; the tool does
 not automatically consume every API page.
 
+## Historical volumes for an existing keyword list
+
+Call `planning_generate_keyword_historical_metrics` with 1–100 keywords,
+`customer_id`, `language` and `geo_target_constants`. Optional parameters are
+`keyword_plan_network` (default `GOOGLE_SEARCH`) and `login_customer_id`.
+Each keyword must contain 1–80 characters; whitespace-only entries are rejected.
+The local 100-keyword limit keeps MCP requests and responses bounded. Larger
+lists must be split into explicit calls; no automatic batching is performed.
+
+```json
+{
+  "customer_id": "1234567890",
+  "language": "languageConstants/1000",
+  "geo_target_constants": ["geoTargetConstants/2840"],
+  "keywords": ["water filter", "water filters", "water purification"]
+}
+```
+
+The response includes targeting, `requested_keyword_count`,
+`returned_result_count` and `results`. Each Google result has `text`, optional
+`close_variants` and optional `keyword_metrics` (average monthly searches,
+monthly history, advertising competition and bid ranges where available).
+The historical period is Google's default, generally twelve months; inspect
+the actual years and months in `monthly_search_volumes`.
+
+Google may merge related input words into one result. Match by `text` and
+`close_variants`, never by array position, and do not sum a merged volume once
+for each spelling. A missing result or metric does not mean zero searches.
+The tool does not create a saved plan or discover additional ideas.
+
 ## Interpreting metrics and handling limits
 
 Results retain Google's protobuf JSON representation: int64 metrics are
@@ -111,7 +143,9 @@ the same rules as `customers`, `search` and `metadata`.
 
 The unit tests use actual Google Ads protobuf messages and a mocked API
 service. They check all seed variants, targeting, one-page pagination,
-unavailable metrics, validation and sanitized errors. The HTTP test uses a
+unavailable metrics, validation and sanitized errors. Historical-metric tests
+also cover merged variants, zero versus missing monthly volumes, keyword-list
+limits and the MCP tool schema. The HTTP test uses a
 real loopback server and MCP client with a mocked Google service. Neither
 test requires Google credentials or proves a Cloud project's live API access.
 
@@ -126,3 +160,5 @@ authorization or Keyword Planner access.
 - [Keyword Planning](https://developers.google.com/google-ads/api/docs/keyword-planning/overview)
 - [Single-user OAuth setup](https://developers.google.com/google-ads/api/docs/oauth/single-user-authentication)
 - [OAuth clients for AI agents](https://support.google.com/cloud/answer/15549257)
+
+- [Historical keyword metrics](https://developers.google.com/google-ads/api/docs/keyword-planning/generate-historical-metrics)
